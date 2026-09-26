@@ -1,0 +1,4 @@
+ride_id,rideable_type,started_at,ended_at,start_station_name,end_station_name,member_casual
+ride_1,classic_bike,2023-01-02 08:00:00,2023-01-02 08:20:00,Station A,Station B,member
+ride_2,electric_bike,2023-01-07 13:30:00,2023-01-07 14:15:00,Station C,Station D,casual
+ride_3,classic_bike,2023-01-08 09:00:00,2023-01-08 09:05:00,Station A,Station E,member
