@@ -73,6 +73,9 @@ def top_start_stations(
     dataframe: pd.DataFrame, rider_type: str, limit: int = 10
 ) -> pd.DataFrame:
     """Return the most common start stations for one rider type."""
+    if "start_station_name" not in dataframe.columns:
+        return pd.DataFrame(columns=["start_station_name", "total_rides"])
+
     station_data = dataframe[
         (dataframe["member_casual"] == rider_type)
         & dataframe["start_station_name"].notna()
