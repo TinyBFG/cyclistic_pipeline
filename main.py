@@ -49,15 +49,6 @@ def main() -> None:
         stage = "preparing project folders"
         paths = ensure_project_folders(PROJECT_ROOT)
 
-        stage = "discovering input files"
-        print("Discovering input files...")
-        csv_files = find_csv_files(paths["raw_data"])
-        if not csv_files:
-            raise FileNotFoundError(
-                f"No CSV files found in {paths['raw_data']}. "
-                "Place monthly Cyclistic/Divvy CSV files in this folder."
-            )
-
         stage = "loading raw trip data"
         print("Loading raw trip data...")
         raw_trips = load_trip_data(paths["raw_data"])
@@ -94,7 +85,7 @@ def main() -> None:
     cleaned_row_count = len(cleaned_trips)
 
     print("Pipeline completed successfully.")
-    print(f"Source files processed: {len(csv_files)}")
+    print(f"Source files processed: {len(find_csv_files(paths["raw_data"]))}")
     print(f"Raw rows loaded: {raw_row_count}")
     print(f"Cleaned rows retained: {cleaned_row_count}")
     print(f"Rows removed: {raw_row_count - cleaned_row_count}")
