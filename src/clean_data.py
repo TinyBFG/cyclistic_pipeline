@@ -48,7 +48,7 @@ def remove_invalid_rides(dataframe: pd.DataFrame) -> pd.DataFrame:
     trips = trips[trips["ride_length"] > 0]
     trips = trips[trips["ride_length"] <= 24 * 60]
 
-    trips = trips.drop_duplicates(subset=["ride_id"])
+    trips = trips.drop_duplicates(subset=("ride_id",))
     # drop refers to the index column and unless needed extra columns unhelpful
     return trips.reset_index(drop=True)
 
@@ -76,4 +76,4 @@ def clean_trip_data(dataframe: pd.DataFrame) -> pd.DataFrame:
     available_columns = [
         column for column in selected_columns if column in trips.columns
     ]
-    return trips[available_columns]
+    return trips.loc[:, available_columns]
