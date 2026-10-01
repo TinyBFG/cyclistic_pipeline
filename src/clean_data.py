@@ -44,11 +44,11 @@ def remove_invalid_rides(dataframe: pd.DataFrame) -> pd.DataFrame:
 
     # Checks if each value in column is in isin() list
     # Divvy data sometimes contains test, maintenance, or malformed rides.
-    trips = trips[trips["member_casual"].isin(["casual", "member"])]
-    trips = trips[trips["ride_length"] > 0]
-    trips = trips[trips["ride_length"] <= 24 * 60]
+    trips = trips.loc[trips["member_casual"].isin(["casual", "member"])].copy()
+    trips = trips.loc[trips["ride_length"] > 0].copy()
+    trips = trips.loc[trips["ride_length"] <= 24 * 60].copy()
 
-    trips = trips.drop_duplicates(subset=("ride_id",))
+    trips = trips.drop_duplicates(subset=["ride_id"])
     # drop refers to the index column and unless needed extra columns unhelpful
     return trips.reset_index(drop=True)
 
