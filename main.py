@@ -2,7 +2,7 @@ from pathlib import Path
 
 from src.analyze_data import create_all_summary_tables, save_summary_tables
 from src.clean_data import clean_trip_data
-from src.load_data import find_csv_files, load_trip_data
+from src.load_data import find_csv_files, load_trip_files
 from src.utils import ensure_project_folders
 
 
@@ -60,7 +60,7 @@ def main() -> None:
 
         stage = "loading raw trip data"
         print("Loading raw trip data...")
-        raw_trips = load_trip_data(paths["raw_data"])
+        raw_trips = load_trip_files(csv_files)
 
         stage = "cleaning and preparing trip data"
         print("Cleaning and preparing trip data...")

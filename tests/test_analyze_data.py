@@ -4,7 +4,7 @@ import pandas as pd
 
 from src.analyze_data import summarize_by_member_type
 from src.clean_data import clean_trip_data
-from src.load_data import load_trip_data
+from src.load_data import find_csv_files, load_trip_data, load_trip_files
 
 
 def test_combining_multiple_csv_files():
@@ -14,6 +14,16 @@ def test_combining_multiple_csv_files():
 
     assert len(result) == 5
     assert set(result["ride_id"]) == {"ride_1", "ride_2", "ride_3", "ride_4", "ride_5"}
+
+
+def test_loading_discovered_csv_files():
+    sample_folder = Path(__file__).resolve().parents[1] / "data" / "sample"
+    csv_files = find_csv_files(sample_folder)
+
+    result = load_trip_files(csv_files)
+
+    assert len(csv_files) == 2
+    assert len(result) == 5
 
 
 def test_summary_calculations_by_member_type():

@@ -25,6 +25,17 @@ def validate_required_columns(dataframe: pd.DataFrame, file_path: Path) -> None:
         raise ValueError(f"{file_path.name} is missing required columns: {missing}")
 
 
+def load_trip_files(csv_files: list[Path]) -> pd.DataFrame:
+    """Load and combine a provided list of monthly trip CSV files."""
+    dataframes = []
+    for file_path in csv_files:
+        monthly_data = pd.read_csv(file_path)
+        validate_required_columns(monthly_data, file_path)
+        dataframes.append(monthly_data)
+
+    return pd.concat(dataframes, ignore_index=True)
+
+
 def load_trip_data(raw_data_folder: Path) -> pd.DataFrame:
     """Load and combine all monthly Cyclistic/Divvy trip CSV files."""
     csv_files = find_csv_files(raw_data_folder)
@@ -34,10 +45,4 @@ def load_trip_data(raw_data_folder: Path) -> pd.DataFrame:
             "Download 12 months of Divvy trip data and place the CSV files there."
         )
 
-    dataframes = []
-    for file_path in csv_files:
-        monthly_data = pd.read_csv(file_path)
-        validate_required_columns(monthly_data, file_path)
-        dataframes.append(monthly_data)
-
-    return pd.concat(dataframes, ignore_index=True)
+    return load_trip_files(csv_files)
