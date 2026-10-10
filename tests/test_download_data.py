@@ -1,11 +1,18 @@
+from pathlib import Path
+from zipfile import ZipFile
+
 import pytest
 
 from src.download_data import (
     DivvyDataset,
+    acquire_dataset,
+    acquire_missing_datasets,
     compare_local_snapshot,
+    extract_dataset_csv,
     get_month_from_raw_csv,
     parse_dataset_listing,
     select_latest_datasets,
+    validate_downloaded_csv,
 )
 
 
@@ -19,6 +26,11 @@ def make_dataset(month: str) -> DivvyDataset:
         size=12345,
         last_modified="2026-01-01T00:00:00.000Z",
     )
+
+
+def make_zip_file(zip_path: Path, member_name: str, contents: str) -> None:
+    with ZipFile(zip_path, "w") as archive:
+        archive.writestr(member_name, contents)
 
 
 def make_s3_listing(keys: list[str], continuation_token: str | None = None) -> str:
@@ -170,3 +182,103 @@ def test_compare_local_snapshot_keeps_unrecognized_files_separate(tmp_path):
     assert [dataset.month for dataset in comparison.missing_datasets] == ["2026-01"]
     assert comparison.obsolete_files == []
     assert comparison.unrecognized_files == [unrecognized_file]
+
+
+def test_extract_dataset_csv_extracts_and_renames_monthly_csv(tmp_path):
+    dataset = make_dataset("2026-01")
+    zip_path = tmp_path / dataset.key
+    make_zip_file(
+        zip_path,
+        "original-name.csv",
+        "ride_id,rideable_type,started_at,ended_at,member_casual\n",
+    )
+    staging_folder = tmp_path / "staging"
+
+    csv_path = extract_dataset_csv(dataset, zip_path, staging_folder)
+
+    assert csv_path.name == "202601-divvy-tripdata.csv"
+    assert (
+        csv_path.read_text()
+        == "ride_id,rideable_type,started_at,ended_at,member_casual\n"
+    )
+
+
+def test_extract_dataset_csv_rejects_zip_without_csv(tmp_path):
+    dataset = make_dataset("2026-01")
+    zip_path = tmp_path / dataset.key
+    make_zip_file(zip_path, "readme.txt", "not csv")
+
+    with pytest.raises(ValueError, match="No CSV file"):
+        extract_dataset_csv(dataset, zip_path, tmp_path)
+
+
+def test_validate_downloaded_csv_accepts_required_columns(tmp_path):
+    csv_path = tmp_path / "202601-divvy-tripdata.csv"
+    csv_path.write_text("ride_id,rideable_type,started_at,ended_at,member_casual\n")
+
+    validate_downloaded_csv(csv_path)
+
+
+def test_validate_downloaded_csv_rejects_missing_required_columns(tmp_path):
+    csv_path = tmp_path / "202601-divvy-tripdata.csv"
+    csv_path.write_text("ride_id,rideable_type,started_at,member_casual\n")
+
+    with pytest.raises(ValueError, match="ended_at"):
+        validate_downloaded_csv(csv_path)
+
+
+def test_acquire_dataset_downloads_extracts_validates_and_removes_zip(tmp_path):
+    source_zip = tmp_path / "source.zip"
+    make_zip_file(
+        source_zip,
+        "inside.csv",
+        "ride_id,rideable_type,started_at,ended_at,member_casual\n",
+    )
+    dataset = make_dataset("2026-01")
+    dataset = DivvyDataset(
+        month=dataset.month,
+        key=dataset.key,
+        url=source_zip.as_uri(),
+        size=source_zip.stat().st_size,
+        last_modified=dataset.last_modified,
+    )
+    staging_folder = tmp_path / "staging"
+
+    csv_path = acquire_dataset(dataset, staging_folder)
+
+    assert csv_path.name == "202601-divvy-tripdata.csv"
+    assert csv_path.exists()
+    assert not (staging_folder / dataset.key).exists()
+
+
+def test_acquire_missing_datasets_returns_all_staged_csv_files(tmp_path):
+    first_zip = tmp_path / "first.zip"
+    second_zip = tmp_path / "second.zip"
+    csv_header = "ride_id,rideable_type,started_at,ended_at,member_casual\n"
+    make_zip_file(first_zip, "first.csv", csv_header)
+    make_zip_file(second_zip, "second.csv", csv_header)
+    first_dataset = make_dataset("2026-01")
+    second_dataset = make_dataset("2026-02")
+    datasets = [
+        DivvyDataset(
+            month=first_dataset.month,
+            key=first_dataset.key,
+            url=first_zip.as_uri(),
+            size=first_zip.stat().st_size,
+            last_modified=first_dataset.last_modified,
+        ),
+        DivvyDataset(
+            month=second_dataset.month,
+            key=second_dataset.key,
+            url=second_zip.as_uri(),
+            size=second_zip.stat().st_size,
+            last_modified=second_dataset.last_modified,
+        ),
+    ]
+
+    acquired_files = acquire_missing_datasets(datasets, tmp_path / "staging")
+
+    assert [file.name for file in acquired_files] == [
+        "202601-divvy-tripdata.csv",
+        "202602-divvy-tripdata.csv",
+    ]

@@ -1,9 +1,15 @@
 from dataclasses import dataclass
 from pathlib import Path
 import re
+import shutil
 import xml.etree.ElementTree as ET
+from zipfile import BadZipFile, ZipFile
 from urllib.parse import urlencode
 from urllib.request import urlopen
+
+import pandas as pd
+
+from src.load_data import validate_required_columns
 
 
 DIVVY_BUCKET_URL = "https://divvy-tripdata.s3.amazonaws.com"
@@ -170,3 +176,83 @@ def compare_local_snapshot(
         obsolete_files=obsolete_files,
         unrecognized_files=find_unrecognized_csv_files(raw_data_folder),
     )
+
+
+def download_dataset_zip(dataset: DivvyDataset, staging_folder: Path) -> Path:
+    """Download one dataset ZIP file into a staging folder."""
+    staging_folder.mkdir(parents=True, exist_ok=True)
+    zip_path = staging_folder / dataset.key
+
+    try:
+        with urlopen(dataset.url, timeout=120) as response:
+            with zip_path.open("wb") as output_file:
+                while True:
+                    chunk = response.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    output_file.write(chunk)
+    except OSError as error:
+        raise RuntimeError(f"Failed to download {dataset.key}: {error}") from error
+
+    if not zip_path.exists() or zip_path.stat().st_size == 0:
+        raise ValueError(f"Downloaded file is empty: {zip_path}")
+
+    return zip_path
+
+
+def extract_dataset_csv(
+    dataset: DivvyDataset, zip_path: Path, staging_folder: Path
+) -> Path:
+    """Extract one monthly CSV from a downloaded Divvy ZIP file."""
+    staging_folder.mkdir(parents=True, exist_ok=True)
+    csv_path = staging_folder / dataset.key.replace(".zip", ".csv")
+
+    try:
+        with ZipFile(zip_path) as archive:
+            csv_names = [
+                name for name in archive.namelist() if name.lower().endswith(".csv")
+            ]
+            if not csv_names:
+                raise ValueError(f"No CSV file found inside {zip_path.name}.")
+
+            with archive.open(csv_names[0]) as source_file:
+                with csv_path.open("wb") as output_file:
+                    shutil.copyfileobj(source_file, output_file)
+    except BadZipFile as error:
+        raise ValueError(f"Downloaded file is not a valid ZIP archive: {zip_path}") from error
+
+    if not csv_path.exists() or csv_path.stat().st_size == 0:
+        raise ValueError(f"Extracted CSV is empty: {csv_path}")
+
+    return csv_path
+
+
+def validate_downloaded_csv(csv_path: Path) -> None:
+    """Validate that a staged CSV has the required Cyclistic columns."""
+    try:
+        header = pd.read_csv(csv_path, nrows=0)
+    except Exception as error:
+        raise ValueError(f"Could not read CSV header from {csv_path.name}: {error}") from error
+
+    validate_required_columns(header, csv_path)
+
+
+def acquire_dataset(dataset: DivvyDataset, staging_folder: Path) -> Path:
+    """Download, extract, and validate one dataset into the staging folder."""
+    zip_path = download_dataset_zip(dataset, staging_folder)
+    csv_path = extract_dataset_csv(dataset, zip_path, staging_folder)
+    validate_downloaded_csv(csv_path)
+    zip_path.unlink(missing_ok=True)
+    return csv_path
+
+
+def acquire_missing_datasets(
+    missing_datasets: list[DivvyDataset], staging_folder: Path
+) -> list[Path]:
+    """Acquire all missing datasets into a staging folder."""
+    acquired_files = []
+
+    for dataset in missing_datasets:
+        acquired_files.append(acquire_dataset(dataset, staging_folder))
+
+    return acquired_files
