@@ -205,7 +205,7 @@ def extract_dataset_csv(
 ) -> Path:
     """Extract one monthly CSV from a downloaded Divvy ZIP file."""
     staging_folder.mkdir(parents=True, exist_ok=True)
-    csv_path = staging_folder / dataset.key.replace(".zip", ".csv")
+    csv_path = staging_folder / get_csv_name_for_dataset(dataset)
 
     try:
         with ZipFile(zip_path) as archive:
@@ -256,3 +256,91 @@ def acquire_missing_datasets(
         acquired_files.append(acquire_dataset(dataset, staging_folder))
 
     return acquired_files
+
+
+def get_csv_name_for_dataset(dataset: DivvyDataset) -> str:
+    """Return the expected CSV filename for a monthly Divvy dataset."""
+    return dataset.key.replace(".zip", ".csv")
+
+
+def build_snapshot_source_map(
+    required_datasets: list[DivvyDataset],
+    reusable_files: dict[str, Path],
+    acquired_files: list[Path],
+) -> dict[str, Path]:
+    """Match each desired monthly CSV name to an existing validated source file."""
+    acquired_files_by_name = {file_path.name: file_path for file_path in acquired_files}
+    snapshot_sources = {}
+
+    for dataset in required_datasets:
+        csv_name = get_csv_name_for_dataset(dataset)
+        source_file = reusable_files.get(dataset.month)
+
+        if source_file is None:
+            source_file = acquired_files_by_name.get(csv_name)
+
+        if source_file is None:
+            raise ValueError(
+                f"Cannot refresh raw snapshot; missing validated CSV for {dataset.month}."
+            )
+
+        validate_downloaded_csv(source_file)
+        snapshot_sources[csv_name] = source_file
+
+    return snapshot_sources
+
+
+def refresh_raw_data_snapshot(
+    required_datasets: list[DivvyDataset],
+    comparison: SnapshotComparison,
+    acquired_files: list[Path],
+    raw_data_folder: Path,
+    staging_folder: Path,
+) -> list[Path]:
+    """Safely replace the active raw-data snapshot with the desired monthly files."""
+    raw_data_folder.mkdir(parents=True, exist_ok=True)
+    staging_folder.mkdir(parents=True, exist_ok=True)
+
+    snapshot_sources = build_snapshot_source_map(
+        required_datasets,
+        comparison.reusable_files,
+        acquired_files,
+    )
+    replacement_folder = staging_folder / "raw_snapshot_replacement"
+    backup_folder = staging_folder / "raw_snapshot_backup"
+
+    if replacement_folder.exists():
+        shutil.rmtree(replacement_folder)
+    if backup_folder.exists():
+        shutil.rmtree(backup_folder)
+
+    replacement_folder.mkdir(parents=True)
+    backup_folder.mkdir(parents=True)
+
+    for csv_name, source_file in snapshot_sources.items():
+        destination = replacement_folder / csv_name
+        shutil.copy2(source_file, destination)
+        validate_downloaded_csv(destination)
+
+    for existing_file in sorted(raw_data_folder.glob("*.csv")):
+        shutil.copy2(existing_file, backup_folder / existing_file.name)
+
+    try:
+        for existing_file in sorted(raw_data_folder.glob("*.csv")):
+            existing_file.unlink()
+
+        for replacement_file in sorted(replacement_folder.glob("*.csv")):
+            shutil.copy2(replacement_file, raw_data_folder / replacement_file.name)
+    except OSError as error:
+        for partial_file in sorted(raw_data_folder.glob("*.csv")):
+            partial_file.unlink()
+        for backup_file in sorted(backup_folder.glob("*.csv")):
+            shutil.copy2(backup_file, raw_data_folder / backup_file.name)
+        raise RuntimeError(
+            "Failed to update raw-data snapshot; previous snapshot was restored."
+        ) from error
+    finally:
+        shutil.rmtree(replacement_folder, ignore_errors=True)
+        shutil.rmtree(backup_folder, ignore_errors=True)
+
+    return sorted(raw_data_folder.glob("*.csv"))

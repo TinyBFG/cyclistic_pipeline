@@ -3,6 +3,7 @@ from zipfile import ZipFile
 
 import pytest
 
+import src.download_data as download_data
 from src.download_data import (
     DivvyDataset,
     acquire_dataset,
@@ -11,6 +12,7 @@ from src.download_data import (
     extract_dataset_csv,
     get_month_from_raw_csv,
     parse_dataset_listing,
+    refresh_raw_data_snapshot,
     select_latest_datasets,
     validate_downloaded_csv,
 )
@@ -31,6 +33,10 @@ def make_dataset(month: str) -> DivvyDataset:
 def make_zip_file(zip_path: Path, member_name: str, contents: str) -> None:
     with ZipFile(zip_path, "w") as archive:
         archive.writestr(member_name, contents)
+
+
+def required_header() -> str:
+    return "ride_id,rideable_type,started_at,ended_at,member_casual\n"
 
 
 def make_s3_listing(keys: list[str], continuation_token: str | None = None) -> str:
@@ -279,6 +285,154 @@ def test_acquire_missing_datasets_returns_all_staged_csv_files(tmp_path):
     acquired_files = acquire_missing_datasets(datasets, tmp_path / "staging")
 
     assert [file.name for file in acquired_files] == [
+        "202601-divvy-tripdata.csv",
+        "202602-divvy-tripdata.csv",
+    ]
+
+
+def test_refresh_raw_data_snapshot_replaces_raw_folder_with_desired_months(tmp_path):
+    raw_folder = tmp_path / "raw"
+    staging_folder = tmp_path / "staging"
+    raw_folder.mkdir()
+    staging_folder.mkdir()
+    required_datasets = [make_dataset("2026-02"), make_dataset("2026-03")]
+    obsolete_file = raw_folder / "202601-divvy-tripdata.csv"
+    reusable_file = raw_folder / "202602-divvy-tripdata.csv"
+    unrecognized_file = raw_folder / "notes.csv"
+    acquired_file = staging_folder / "202603-divvy-tripdata.csv"
+
+    obsolete_file.write_text(required_header())
+    reusable_file.write_text(required_header())
+    unrecognized_file.write_text("notes\n")
+    acquired_file.write_text(required_header())
+    comparison = compare_local_snapshot(required_datasets, raw_folder)
+
+    refreshed_files = refresh_raw_data_snapshot(
+        required_datasets,
+        comparison,
+        [acquired_file],
+        raw_folder,
+        staging_folder,
+    )
+
+    assert [file.name for file in refreshed_files] == [
+        "202602-divvy-tripdata.csv",
+        "202603-divvy-tripdata.csv",
+    ]
+    assert not obsolete_file.exists()
+    assert not unrecognized_file.exists()
+
+
+def test_refresh_raw_data_snapshot_preserves_previous_snapshot_when_validation_fails(
+    tmp_path,
+):
+    raw_folder = tmp_path / "raw"
+    staging_folder = tmp_path / "staging"
+    raw_folder.mkdir()
+    staging_folder.mkdir()
+    required_datasets = [make_dataset("2026-02"), make_dataset("2026-03")]
+    january_file = raw_folder / "202601-divvy-tripdata.csv"
+    february_file = raw_folder / "202602-divvy-tripdata.csv"
+    invalid_acquired_file = staging_folder / "202603-divvy-tripdata.csv"
+
+    january_file.write_text(required_header())
+    february_file.write_text(required_header())
+    invalid_acquired_file.write_text(
+        "ride_id,rideable_type,started_at,member_casual\n"
+    )
+    comparison = compare_local_snapshot(required_datasets, raw_folder)
+
+    with pytest.raises(ValueError, match="ended_at"):
+        refresh_raw_data_snapshot(
+            required_datasets,
+            comparison,
+            [invalid_acquired_file],
+            raw_folder,
+            staging_folder,
+        )
+
+    assert sorted(file.name for file in raw_folder.glob("*.csv")) == [
+        "202601-divvy-tripdata.csv",
+        "202602-divvy-tripdata.csv",
+    ]
+    assert not (raw_folder / "202603-divvy-tripdata.csv").exists()
+
+
+def test_refresh_raw_data_snapshot_requires_all_missing_months_before_replacing(
+    tmp_path,
+):
+    raw_folder = tmp_path / "raw"
+    staging_folder = tmp_path / "staging"
+    raw_folder.mkdir()
+    staging_folder.mkdir()
+    required_datasets = [make_dataset("2026-02"), make_dataset("2026-03")]
+    january_file = raw_folder / "202601-divvy-tripdata.csv"
+    february_file = raw_folder / "202602-divvy-tripdata.csv"
+
+    january_file.write_text(required_header())
+    february_file.write_text(required_header())
+    comparison = compare_local_snapshot(required_datasets, raw_folder)
+
+    with pytest.raises(ValueError, match="2026-03"):
+        refresh_raw_data_snapshot(
+            required_datasets,
+            comparison,
+            [],
+            raw_folder,
+            staging_folder,
+        )
+
+    assert sorted(file.name for file in raw_folder.glob("*.csv")) == [
+        "202601-divvy-tripdata.csv",
+        "202602-divvy-tripdata.csv",
+    ]
+
+
+def test_refresh_raw_data_snapshot_restores_backup_when_replacement_fails(
+    tmp_path,
+    monkeypatch,
+):
+    raw_folder = tmp_path / "raw"
+    staging_folder = tmp_path / "staging"
+    raw_folder.mkdir()
+    staging_folder.mkdir()
+    required_datasets = [make_dataset("2026-02"), make_dataset("2026-03")]
+    january_file = raw_folder / "202601-divvy-tripdata.csv"
+    february_file = raw_folder / "202602-divvy-tripdata.csv"
+    acquired_file = staging_folder / "202603-divvy-tripdata.csv"
+
+    january_file.write_text(required_header())
+    february_file.write_text(required_header())
+    acquired_file.write_text(required_header())
+    comparison = compare_local_snapshot(required_datasets, raw_folder)
+    original_copy2 = download_data.shutil.copy2
+
+    def fail_when_copying_replacement_to_raw(source, destination):
+        source_path = Path(source)
+        destination_path = Path(destination)
+        if (
+            source_path.parent.name == "raw_snapshot_replacement"
+            and destination_path.parent == raw_folder
+        ):
+            raise OSError("simulated copy failure")
+        return original_copy2(source, destination)
+
+    monkeypatch.setattr(
+        download_data.shutil,
+        "copy2",
+        fail_when_copying_replacement_to_raw,
+    )
+
+    with pytest.raises(RuntimeError, match="previous snapshot was restored"):
+        refresh_raw_data_snapshot(
+            required_datasets,
+            comparison,
+            [acquired_file],
+            raw_folder,
+            staging_folder,
+        )
+
+    assert sorted(file.name for file in raw_folder.glob("*.csv")) == [
         "202601-divvy-tripdata.csv",
         "202602-divvy-tripdata.csv",
     ]
