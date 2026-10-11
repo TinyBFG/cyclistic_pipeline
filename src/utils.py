@@ -27,6 +27,7 @@ def ensure_project_folders(project_root: Path) -> dict[str, Path]:
         "raw_data": project_root / "data" / "raw",
         "processed_data": project_root / "data" / "processed",
         "sample_data": project_root / "data" / "sample",
+        "staging_data": project_root / "data" / "staging",
         "charts": project_root / "outputs" / "charts",
         "tables": project_root / "outputs" / "tables",
         "final_report": project_root / "outputs" / "final_report",

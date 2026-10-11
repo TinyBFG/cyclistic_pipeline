@@ -15,9 +15,10 @@ The goal is to analyze 12 months of Cyclistic/Divvy trip data, compare usage pat
 ```text
 cyclistic_case_study/
 ├── data/
-│   ├── raw/          # Place the 12 monthly trip CSV files here
+│   ├── raw/          # Active rolling 12-month raw Divvy snapshot
 │   ├── processed/    # Cleaned combined dataset is exported here
-│   └── sample/       # Small sample data for tests and examples
+│   ├── sample/       # Small sample data for tests and examples
+│   └── staging/      # Temporary download/extraction workspace
 ├── docs/
 │   ├── cleaning_methodology.md
 │   └── final_case_study.md
@@ -26,6 +27,7 @@ cyclistic_case_study/
 │   ├── tables/       # Exported CSV summary tables
 │   └── final_report/ # Optional location for final report exports
 ├── src/
+│   ├── download_data.py
 │   ├── load_data.py
 │   ├── clean_data.py
 │   ├── analyze_data.py
@@ -40,11 +42,15 @@ cyclistic_case_study/
 
 ## Data Source
 
-Download 12 months of Divvy trip data from:
+The project uses the official Divvy trip-data source:
 
 https://divvy-tripdata.s3.amazonaws.com/index.html
 
-Place the monthly `.csv` files in `data/raw/`. Do not unzip nested folders into `data/raw/`; the CSV files should be directly inside that folder.
+When `python main.py` runs, the pipeline checks the official source, identifies the most recent 12 published monthly datasets, and compares those months against the local files in `data/raw/`.
+
+If the local raw-data snapshot is already current, no files are downloaded. If one or more months are missing, the pipeline downloads only the missing ZIP files, extracts the CSVs, validates the required columns, and safely refreshes `data/raw/`.
+
+The `data/raw/` folder is treated as the active rolling 12-month snapshot used for the current analysis. It should not grow into a permanent archive of every historical month.
 
 ## How to Run the Project
 
@@ -54,16 +60,17 @@ Place the monthly `.csv` files in `data/raw/`. Do not unzip nested folders into 
 pip install -r requirements.txt
 ```
 
-2. Add 12 monthly Divvy trip CSV files to `data/raw/`.
-
-3. Run the full analysis:
+2. Run the full analysis:
 
 ```bash
 python main.py
 ```
 
+The script automatically prepares the latest raw Divvy data before loading, cleaning, analyzing, and visualizing the trips.
+
 The script creates:
 
+- the active raw snapshot in `data/raw/`
 - `data/processed/cyclistic_cleaned.csv`
 - summary tables in `outputs/tables/`
 - chart images in `outputs/charts/`
@@ -82,6 +89,7 @@ The project produces:
 
 - a clear business task statement
 - a data source description
+- an automated rolling 12-month raw-data snapshot
 - documented cleaning and manipulation steps
 - summary tables comparing casual riders and members
 - polished charts for key usage patterns
@@ -90,4 +98,4 @@ The project produces:
 
 ## Notes
 
-This version focuses only on the Cyclistic case study deliverables. It does not build a dashboard or automated monthly pipeline.
+This version focuses on a local, single-command Cyclistic pipeline. It automatically maintains the latest 12 months of official Divvy data, but it does not include scheduling, cloud deployment, or Tableau/Power BI dashboard integration yet.

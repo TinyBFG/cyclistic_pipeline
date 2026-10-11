@@ -2,11 +2,20 @@ from pathlib import Path
 
 from src.analyze_data import create_all_summary_tables, save_summary_tables
 from src.clean_data import clean_trip_data
+from src.download_data import (
+    DivvyDataset,
+    acquire_missing_datasets,
+    compare_local_snapshot,
+    fetch_available_datasets,
+    refresh_raw_data_snapshot,
+    select_latest_datasets,
+)
 from src.load_data import find_csv_files, load_trip_files
 from src.utils import ensure_project_folders
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+RAW_DATASET_COUNT = 12
 ANALYTICAL_COLUMNS = {
     "ride_id",
     "rideable_type",
@@ -18,6 +27,70 @@ ANALYTICAL_COLUMNS = {
     "month",
     "hour",
 }
+
+
+def format_month_window(required_datasets: list[DivvyDataset]) -> str:
+    """Return a readable first-month to last-month range for status output."""
+    if not required_datasets:
+        return "no monthly datasets found"
+
+    return f"{required_datasets[0].month} to {required_datasets[-1].month}"
+
+
+def ensure_latest_raw_snapshot(paths: dict[str, Path]) -> list[Path]:
+    """Ensure data/raw contains the latest rolling Divvy raw-data snapshot."""
+    print("Checking Divvy data source...")
+    available_datasets = fetch_available_datasets()
+    required_datasets = select_latest_datasets(
+        available_datasets,
+        dataset_count=RAW_DATASET_COUNT,
+    )
+
+    if not required_datasets:
+        raise ValueError("No monthly Divvy datasets were found at the official source.")
+
+    print(f"Latest available month: {required_datasets[-1].month}")
+    print(f"Required window: {format_month_window(required_datasets)}")
+
+    comparison = compare_local_snapshot(required_datasets, paths["raw_data"])
+    snapshot_is_current = (
+        not comparison.missing_datasets
+        and not comparison.obsolete_files
+        and not comparison.unrecognized_files
+    )
+
+    if snapshot_is_current:
+        print("Local raw-data snapshot is current. No downloads required.")
+        return find_csv_files(paths["raw_data"])
+
+    if comparison.reusable_files:
+        print(f"Reusing {len(comparison.reusable_files)} existing monthly files.")
+    if comparison.missing_datasets:
+        print(f"Downloading {len(comparison.missing_datasets)} missing monthly files...")
+    if comparison.obsolete_files:
+        print(
+            f"Removing {len(comparison.obsolete_files)} obsolete monthly files "
+            "after validation."
+        )
+    if comparison.unrecognized_files:
+        print(
+            f"Removing {len(comparison.unrecognized_files)} unrecognized CSV files "
+            "after validation."
+        )
+
+    acquired_files = acquire_missing_datasets(
+        comparison.missing_datasets,
+        paths["staging_data"],
+    )
+    refreshed_files = refresh_raw_data_snapshot(
+        required_datasets,
+        comparison,
+        acquired_files,
+        paths["raw_data"],
+        paths["staging_data"],
+    )
+    print("Raw-data snapshot updated successfully.")
+    return refreshed_files
 
 
 def validate_processed_data(dataframe) -> None:
@@ -49,13 +122,12 @@ def main() -> None:
         stage = "preparing project folders"
         paths = ensure_project_folders(PROJECT_ROOT)
 
-        stage = "discovering input files"
-        print("Discovering input files...")
-        csv_files = find_csv_files(paths["raw_data"])
+        stage = "refreshing raw data snapshot"
+        csv_files = ensure_latest_raw_snapshot(paths)
         if not csv_files:
             raise FileNotFoundError(
                 f"No CSV files found in {paths['raw_data']}. "
-                "Place monthly Cyclistic/Divvy CSV files in this folder."
+                "The raw-data snapshot refresh did not produce input files."
             )
 
         stage = "loading raw trip data"

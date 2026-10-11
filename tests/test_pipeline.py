@@ -2,6 +2,7 @@ import pandas as pd
 import pytest
 
 import main
+from src.download_data import DivvyDataset
 from src.load_data import load_trip_data
 
 
@@ -32,10 +33,30 @@ def valid_trip_rows():
     ]
 
 
-def test_main_fails_clearly_when_no_raw_csv_files_exist(tmp_path, monkeypatch):
-    monkeypatch.setattr(main, "PROJECT_ROOT", tmp_path)
+def make_dataset(month: str) -> DivvyDataset:
+    key_month = month.replace("-", "")
+    key = f"{key_month}-divvy-tripdata.zip"
+    return DivvyDataset(
+        month=month,
+        key=key,
+        url=f"https://divvy-tripdata.s3.amazonaws.com/{key}",
+        size=12345,
+        last_modified="2026-01-01T00:00:00.000Z",
+    )
 
-    with pytest.raises(FileNotFoundError, match="No CSV files found"):
+
+def mock_current_raw_snapshot(monkeypatch, months: list[str]) -> None:
+    datasets = [make_dataset(month) for month in months]
+
+    monkeypatch.setattr(main, "RAW_DATASET_COUNT", len(datasets))
+    monkeypatch.setattr(main, "fetch_available_datasets", lambda: datasets)
+
+
+def test_main_fails_clearly_when_no_official_datasets_exist(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(main, "fetch_available_datasets", lambda: [])
+
+    with pytest.raises(ValueError, match="No monthly Divvy datasets"):
         main.main()
 
 
@@ -61,6 +82,7 @@ def test_missing_required_input_columns_identifies_file_and_columns(tmp_path):
 
 def test_main_processes_valid_raw_data_and_creates_outputs(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "PROJECT_ROOT", tmp_path)
+    mock_current_raw_snapshot(monkeypatch, ["2023-01"])
 
     raw_folder = tmp_path / "data" / "raw"
     raw_folder.mkdir(parents=True)
@@ -71,6 +93,39 @@ def test_main_processes_valid_raw_data_and_creates_outputs(tmp_path, monkeypatch
     assert (tmp_path / "data" / "processed" / "cyclistic_cleaned.csv").exists()
     assert (tmp_path / "outputs" / "tables" / "member_type_summary.csv").exists()
     assert (tmp_path / "outputs" / "charts" / "total_rides_by_rider_type.png").exists()
+
+
+def test_main_downloads_missing_data_before_loading(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "PROJECT_ROOT", tmp_path)
+    mock_current_raw_snapshot(monkeypatch, ["2023-01"])
+    csv_header = (
+        "ride_id,rideable_type,started_at,ended_at,"
+        "start_station_name,end_station_name,member_casual\n"
+    )
+    csv_row = (
+        "ride_1,classic_bike,2023-01-01 10:00:00,2023-01-01 10:30:00,"
+        "Station A,Station B,member\n"
+    )
+
+    def fake_acquire_missing_datasets(missing_datasets, staging_folder):
+        staging_folder.mkdir(parents=True, exist_ok=True)
+        acquired_files = []
+        for dataset in missing_datasets:
+            csv_path = staging_folder / dataset.key.replace(".zip", ".csv")
+            csv_path.write_text(csv_header + csv_row)
+            acquired_files.append(csv_path)
+        return acquired_files
+
+    monkeypatch.setattr(
+        main,
+        "acquire_missing_datasets",
+        fake_acquire_missing_datasets,
+    )
+
+    main.main()
+
+    assert (tmp_path / "data" / "raw" / "202301-divvy-tripdata.csv").exists()
+    assert (tmp_path / "data" / "processed" / "cyclistic_cleaned.csv").exists()
 
 
 def test_processed_data_validation_rejects_invalid_ride_lengths():

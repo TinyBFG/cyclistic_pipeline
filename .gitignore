@@ -6,6 +6,16 @@ __pycache__/
 .venv/
 venv/
 
+# Temporary data acquisition workspace
+data/staging/
+
 # IDE / OS files
 .DS_Store
 Thumbs.db
+
+# Large generated datasets
+/data/raw/
+/data/processed/
+
+# Temporary pytest directories
+/.pytest_tmp_*/
