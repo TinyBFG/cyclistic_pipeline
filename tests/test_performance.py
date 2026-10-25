@@ -1,8 +1,9 @@
 from collections.abc import Callable
+from threading import Event
 
 import pytest
 
-from src.performance import measure_stage
+from src.performance import PeakMemoryMonitor, measure_stage
 
 
 def make_clock(readings: list[float]) -> Callable[[], float]:
@@ -46,3 +47,63 @@ def test_measure_stage_records_time_when_stage_fails():
             raise ValueError("example failure")
 
     assert timings == {"cleaning data": 1.5}
+
+
+def test_peak_memory_monitor_records_largest_sample():
+    readings = [100, 300, 200]
+    reading_index = 0
+    three_samples_recorded = Event()
+
+    def read_memory() -> int:
+        nonlocal reading_index
+        value = readings[min(reading_index, len(readings) - 1)]
+        reading_index += 1
+        if reading_index >= 3:
+            three_samples_recorded.set()
+        return value
+
+    monitor = PeakMemoryMonitor(
+        sample_interval_seconds=0.001,
+        memory_reader=read_memory,
+    )
+
+    with monitor:
+        assert three_samples_recorded.wait(timeout=1)
+
+    assert monitor.peak_rss_bytes == 300
+    assert not monitor.is_running
+
+
+def test_peak_memory_monitor_does_nothing_when_disabled():
+    def unexpected_memory_read() -> int:
+        raise AssertionError("Memory should not be read when monitoring is disabled.")
+
+    monitor = PeakMemoryMonitor(
+        enabled=False,
+        memory_reader=unexpected_memory_read,
+    )
+
+    with monitor:
+        pass
+
+    assert monitor.peak_rss_bytes == 0
+    assert not monitor.is_running
+
+
+def test_peak_memory_monitor_rejects_invalid_interval():
+    with pytest.raises(ValueError, match="greater than zero"):
+        PeakMemoryMonitor(sample_interval_seconds=0)
+
+
+def test_peak_memory_monitor_stops_when_measured_code_fails():
+    monitor = PeakMemoryMonitor(
+        sample_interval_seconds=0.001,
+        memory_reader=lambda: 100,
+    )
+
+    with pytest.raises(ValueError, match="example failure"):
+        with monitor:
+            raise ValueError("example failure")
+
+    assert monitor.peak_rss_bytes == 100
+    assert not monitor.is_running
