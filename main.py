@@ -11,6 +11,7 @@ from src.download_data import (
     select_latest_datasets,
 )
 from src.load_data import find_csv_files, load_trip_files
+from src.performance import measure_stage
 from src.utils import ensure_project_folders
 
 
@@ -113,17 +114,20 @@ def validate_processed_data(dataframe) -> None:
         raise ValueError("Cleaned dataset still contains invalid ride durations.")
 
 
-def main() -> None:
-    """Run the full Cyclistic case study workflow."""
+def main(measure_performance: bool = False) -> dict[str, float]:
+    """Run the workflow and optionally return elapsed time for each stage."""
     stage = "starting"
+    timings = {}
     print("Starting Cyclistic pipeline...")
 
     try:
         stage = "preparing project folders"
-        paths = ensure_project_folders(PROJECT_ROOT)
+        with measure_stage(stage, timings, enabled=measure_performance):
+            paths = ensure_project_folders(PROJECT_ROOT)
 
         stage = "refreshing raw data snapshot"
-        csv_files = ensure_latest_raw_snapshot(paths)
+        with measure_stage(stage, timings, enabled=measure_performance):
+            csv_files = ensure_latest_raw_snapshot(paths)
         if not csv_files:
             raise FileNotFoundError(
                 f"No CSV files found in {paths['raw_data']}. "
@@ -132,31 +136,40 @@ def main() -> None:
 
         stage = "loading raw trip data"
         print("Loading raw trip data...")
-        raw_trips = load_trip_files(csv_files)
+        with measure_stage(stage, timings, enabled=measure_performance):
+            raw_trips = load_trip_files(csv_files)
 
         stage = "cleaning and preparing trip data"
         print("Cleaning and preparing trip data...")
-        cleaned_trips = clean_trip_data(raw_trips)
+        with measure_stage(stage, timings, enabled=measure_performance):
+            cleaned_trips = clean_trip_data(raw_trips)
 
         stage = "validating cleaned data"
         print("Validating cleaned data...")
-        validate_processed_data(cleaned_trips)
+        with measure_stage(stage, timings, enabled=measure_performance):
+            validate_processed_data(cleaned_trips)
 
         stage = "exporting cleaned data"
         print("Exporting cleaned data...")
         cleaned_path = paths["processed_data"] / "cyclistic_cleaned.csv"
-        cleaned_trips.to_csv(cleaned_path, index=False)
+        with measure_stage(stage, timings, enabled=measure_performance):
+            cleaned_trips.to_csv(cleaned_path, index=False)
 
         stage = "creating summary tables"
         print("Creating summary tables...")
-        summary_tables = create_all_summary_tables(cleaned_trips)
-        save_summary_tables(summary_tables, paths["tables"])
+        with measure_stage(stage, timings, enabled=measure_performance):
+            summary_tables = create_all_summary_tables(cleaned_trips)
+
+        stage = "saving summary tables"
+        with measure_stage(stage, timings, enabled=measure_performance):
+            save_summary_tables(summary_tables, paths["tables"])
 
         stage = "creating charts"
         print("Creating charts...")
-        from src.visualize_data import create_all_charts
+        with measure_stage(stage, timings, enabled=measure_performance):
+            from src.visualize_data import create_all_charts
 
-        create_all_charts(summary_tables, paths["charts"])
+            create_all_charts(summary_tables, paths["charts"])
 
     except Exception as error:
         print(f"Pipeline failed while {stage}: {error}")
@@ -173,6 +186,7 @@ def main() -> None:
     print(f"Cleaned data: {cleaned_path}")
     print(f"Tables: {paths['tables']}")
     print(f"Charts: {paths['charts']}")
+    return timings
 
 
 if __name__ == "__main__":
