@@ -88,12 +88,12 @@ def test_main_processes_valid_raw_data_and_creates_outputs(tmp_path, monkeypatch
     raw_folder.mkdir(parents=True)
     write_trip_csv(raw_folder / "202301-divvy-tripdata.csv", valid_trip_rows())
 
-    timings = main.main(measure_performance=True)
+    metrics = main.main(measure_performance=True)
 
     assert (tmp_path / "data" / "processed" / "cyclistic_cleaned.csv").exists()
     assert (tmp_path / "outputs" / "tables" / "member_type_summary.csv").exists()
     assert (tmp_path / "outputs" / "charts" / "total_rides_by_rider_type.png").exists()
-    assert set(timings) == {
+    assert set(metrics.stage_timings) == {
         "preparing project folders",
         "refreshing raw data snapshot",
         "loading raw trip data",
@@ -104,7 +104,9 @@ def test_main_processes_valid_raw_data_and_creates_outputs(tmp_path, monkeypatch
         "saving summary tables",
         "creating charts",
     }
-    assert all(duration >= 0 for duration in timings.values())
+    assert all(duration >= 0 for duration in metrics.stage_timings.values())
+    assert metrics.sampled_peak_rss_bytes is not None
+    assert metrics.sampled_peak_rss_bytes > 0
 
 
 def test_main_downloads_missing_data_before_loading(tmp_path, monkeypatch):
@@ -134,11 +136,12 @@ def test_main_downloads_missing_data_before_loading(tmp_path, monkeypatch):
         fake_acquire_missing_datasets,
     )
 
-    timings = main.main()
+    metrics = main.main()
 
     assert (tmp_path / "data" / "raw" / "202301-divvy-tripdata.csv").exists()
     assert (tmp_path / "data" / "processed" / "cyclistic_cleaned.csv").exists()
-    assert timings == {}
+    assert metrics.stage_timings == {}
+    assert metrics.sampled_peak_rss_bytes is None
 
 
 def test_processed_data_validation_rejects_invalid_ride_lengths():

@@ -1,5 +1,6 @@
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from threading import Event, Thread
 from time import perf_counter
 from types import TracebackType
@@ -9,6 +10,14 @@ import psutil
 
 Clock = Callable[[], float]
 MemoryReader = Callable[[], int]
+
+
+@dataclass(frozen=True)
+class PerformanceMetrics:
+    """Performance measurements collected during one pipeline run."""
+
+    stage_timings: dict[str, float]
+    sampled_peak_rss_bytes: int | None
 
 
 @contextmanager

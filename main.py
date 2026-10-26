@@ -11,7 +11,7 @@ from src.download_data import (
     select_latest_datasets,
 )
 from src.load_data import find_csv_files, load_trip_files
-from src.performance import measure_stage
+from src.performance import PeakMemoryMonitor, PerformanceMetrics, measure_stage
 from src.utils import ensure_project_folders
 
 
@@ -114,10 +114,12 @@ def validate_processed_data(dataframe) -> None:
         raise ValueError("Cleaned dataset still contains invalid ride durations.")
 
 
-def main(measure_performance: bool = False) -> dict[str, float]:
-    """Run the workflow and optionally return elapsed time for each stage."""
+def _run_pipeline(
+    measure_performance: bool,
+    timings: dict[str, float],
+) -> None:
+    """Run the pipeline stages and record optional stage timings."""
     stage = "starting"
-    timings = {}
     print("Starting Cyclistic pipeline...")
 
     try:
@@ -186,7 +188,23 @@ def main(measure_performance: bool = False) -> dict[str, float]:
     print(f"Cleaned data: {cleaned_path}")
     print(f"Tables: {paths['tables']}")
     print(f"Charts: {paths['charts']}")
-    return timings
+
+
+def main(measure_performance: bool = False) -> PerformanceMetrics:
+    """Run the workflow and return any requested performance measurements."""
+    timings: dict[str, float] = {}
+    memory_monitor = PeakMemoryMonitor(enabled=measure_performance)
+
+    with memory_monitor:
+        _run_pipeline(measure_performance, timings)
+
+    sampled_peak_rss_bytes = (
+        memory_monitor.peak_rss_bytes if measure_performance else None
+    )
+    return PerformanceMetrics(
+        stage_timings=timings,
+        sampled_peak_rss_bytes=sampled_peak_rss_bytes,
+    )
 
 
 if __name__ == "__main__":
