@@ -105,6 +105,8 @@ def test_main_processes_valid_raw_data_and_creates_outputs(tmp_path, monkeypatch
         "creating charts",
     }
     assert all(duration >= 0 for duration in metrics.stage_timings.values())
+    assert metrics.total_runtime_seconds is not None
+    assert metrics.total_runtime_seconds >= sum(metrics.stage_timings.values())
     assert metrics.sampled_peak_rss_bytes is not None
     assert metrics.sampled_peak_rss_bytes > 0
 
@@ -141,6 +143,7 @@ def test_main_downloads_missing_data_before_loading(tmp_path, monkeypatch):
     assert (tmp_path / "data" / "raw" / "202301-divvy-tripdata.csv").exists()
     assert (tmp_path / "data" / "processed" / "cyclistic_cleaned.csv").exists()
     assert metrics.stage_timings == {}
+    assert metrics.total_runtime_seconds is None
     assert metrics.sampled_peak_rss_bytes is None
 
 

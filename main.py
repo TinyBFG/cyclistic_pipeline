@@ -193,16 +193,23 @@ def _run_pipeline(
 def main(measure_performance: bool = False) -> PerformanceMetrics:
     """Run the workflow and return any requested performance measurements."""
     timings: dict[str, float] = {}
+    total_runtime: dict[str, float] = {}
     memory_monitor = PeakMemoryMonitor(enabled=measure_performance)
 
     with memory_monitor:
-        _run_pipeline(measure_performance, timings)
+        with measure_stage(
+            "pipeline",
+            total_runtime,
+            enabled=measure_performance,
+        ):
+            _run_pipeline(measure_performance, timings)
 
     sampled_peak_rss_bytes = (
         memory_monitor.peak_rss_bytes if measure_performance else None
     )
     return PerformanceMetrics(
         stage_timings=timings,
+        total_runtime_seconds=total_runtime.get("pipeline"),
         sampled_peak_rss_bytes=sampled_peak_rss_bytes,
     )
 

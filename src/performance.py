@@ -17,6 +17,7 @@ class PerformanceMetrics:
     """Performance measurements collected during one pipeline run."""
 
     stage_timings: dict[str, float]
+    total_runtime_seconds: float | None
     sampled_peak_rss_bytes: int | None
 
 
