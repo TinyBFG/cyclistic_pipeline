@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
@@ -31,6 +33,18 @@ def valid_trip_rows():
             "member_casual": "casual",
         },
     ]
+
+
+def read_analytical_outputs(project_root: Path) -> dict[str, bytes]:
+    """Read processed and summary CSV outputs for exact comparison."""
+    output_files = [
+        project_root / "data" / "processed" / "cyclistic_cleaned.csv",
+        *sorted((project_root / "outputs" / "tables").glob("*.csv")),
+    ]
+    return {
+        str(output_file.relative_to(project_root)): output_file.read_bytes()
+        for output_file in output_files
+    }
 
 
 def make_dataset(month: str) -> DivvyDataset:
@@ -151,6 +165,26 @@ def test_main_downloads_missing_data_before_loading(tmp_path, monkeypatch, capsy
     assert metrics.total_runtime_seconds is None
     assert metrics.sampled_peak_rss_bytes is None
     assert "Performance report" not in capsys.readouterr().out
+
+
+def test_performance_measurement_does_not_change_analytical_outputs(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(main, "PROJECT_ROOT", tmp_path)
+    mock_current_raw_snapshot(monkeypatch, ["2023-01"])
+
+    raw_folder = tmp_path / "data" / "raw"
+    raw_folder.mkdir(parents=True)
+    write_trip_csv(raw_folder / "202301-divvy-tripdata.csv", valid_trip_rows())
+
+    main.main(measure_performance=False)
+    outputs_without_measurement = read_analytical_outputs(tmp_path)
+
+    main.main(measure_performance=True)
+    outputs_with_measurement = read_analytical_outputs(tmp_path)
+
+    assert outputs_with_measurement == outputs_without_measurement
 
 
 def test_processed_data_validation_rejects_invalid_ride_lengths():
