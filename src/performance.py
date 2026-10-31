@@ -21,6 +21,36 @@ class PerformanceMetrics:
     sampled_peak_rss_bytes: int | None
 
 
+def format_performance_report(metrics: PerformanceMetrics) -> str:
+    """Return a concise, human-readable summary of pipeline performance."""
+    total_runtime = (
+        f"{metrics.total_runtime_seconds:.2f} s"
+        if metrics.total_runtime_seconds is not None
+        else "not measured"
+    )
+    peak_memory = (
+        f"{metrics.sampled_peak_rss_bytes / (1024**2):.2f} MiB"
+        if metrics.sampled_peak_rss_bytes is not None
+        else "not measured"
+    )
+    lines = [
+        "Performance report",
+        f"Total runtime: {total_runtime}",
+        f"Sampled peak memory (RSS): {peak_memory}",
+    ]
+
+    if metrics.stage_timings:
+        lines.append("Stage timings:")
+        lines.extend(
+            f"  - {stage_name}: {duration:.2f} s"
+            for stage_name, duration in metrics.stage_timings.items()
+        )
+    else:
+        lines.append("Stage timings: not measured")
+
+    return "\n".join(lines)
+
+
 @contextmanager
 def measure_stage(
     stage_name: str,

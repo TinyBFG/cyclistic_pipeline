@@ -3,7 +3,12 @@ from threading import Event
 
 import pytest
 
-from src.performance import PeakMemoryMonitor, measure_stage
+from src.performance import (
+    PeakMemoryMonitor,
+    PerformanceMetrics,
+    format_performance_report,
+    measure_stage,
+)
 
 
 def make_clock(readings: list[float]) -> Callable[[], float]:
@@ -19,6 +24,28 @@ def test_measure_stage_records_elapsed_seconds():
         pass
 
     assert timings == {"loading raw data": 2.75}
+
+
+def test_format_performance_report_uses_readable_units_and_stage_order():
+    metrics = PerformanceMetrics(
+        stage_timings={
+            "loading raw trip data": 4.25,
+            "cleaning trip data": 2.5,
+        },
+        total_runtime_seconds=12.345,
+        sampled_peak_rss_bytes=512 * 1024**2,
+    )
+
+    report = format_performance_report(metrics)
+
+    assert report == (
+        "Performance report\n"
+        "Total runtime: 12.35 s\n"
+        "Sampled peak memory (RSS): 512.00 MiB\n"
+        "Stage timings:\n"
+        "  - loading raw trip data: 4.25 s\n"
+        "  - cleaning trip data: 2.50 s"
+    )
 
 
 def test_measure_stage_does_nothing_when_disabled():

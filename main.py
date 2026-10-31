@@ -11,7 +11,12 @@ from src.download_data import (
     select_latest_datasets,
 )
 from src.load_data import find_csv_files, load_trip_files
-from src.performance import PeakMemoryMonitor, PerformanceMetrics, measure_stage
+from src.performance import (
+    PeakMemoryMonitor,
+    PerformanceMetrics,
+    format_performance_report,
+    measure_stage,
+)
 from src.utils import ensure_project_folders
 
 
@@ -207,11 +212,15 @@ def main(measure_performance: bool = False) -> PerformanceMetrics:
     sampled_peak_rss_bytes = (
         memory_monitor.peak_rss_bytes if measure_performance else None
     )
-    return PerformanceMetrics(
+    metrics = PerformanceMetrics(
         stage_timings=timings,
         total_runtime_seconds=total_runtime.get("pipeline"),
         sampled_peak_rss_bytes=sampled_peak_rss_bytes,
     )
+    if measure_performance:
+        print()
+        print(format_performance_report(metrics))
+    return metrics
 
 
 if __name__ == "__main__":

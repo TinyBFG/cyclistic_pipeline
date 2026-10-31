@@ -80,7 +80,11 @@ def test_missing_required_input_columns_identifies_file_and_columns(tmp_path):
         load_trip_data(raw_folder)
 
 
-def test_main_processes_valid_raw_data_and_creates_outputs(tmp_path, monkeypatch):
+def test_main_processes_valid_raw_data_and_creates_outputs(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
     monkeypatch.setattr(main, "PROJECT_ROOT", tmp_path)
     mock_current_raw_snapshot(monkeypatch, ["2023-01"])
 
@@ -109,9 +113,10 @@ def test_main_processes_valid_raw_data_and_creates_outputs(tmp_path, monkeypatch
     assert metrics.total_runtime_seconds >= sum(metrics.stage_timings.values())
     assert metrics.sampled_peak_rss_bytes is not None
     assert metrics.sampled_peak_rss_bytes > 0
+    assert "Performance report" in capsys.readouterr().out
 
 
-def test_main_downloads_missing_data_before_loading(tmp_path, monkeypatch):
+def test_main_downloads_missing_data_before_loading(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(main, "PROJECT_ROOT", tmp_path)
     mock_current_raw_snapshot(monkeypatch, ["2023-01"])
     csv_header = (
@@ -145,6 +150,7 @@ def test_main_downloads_missing_data_before_loading(tmp_path, monkeypatch):
     assert metrics.stage_timings == {}
     assert metrics.total_runtime_seconds is None
     assert metrics.sampled_peak_rss_bytes is None
+    assert "Performance report" not in capsys.readouterr().out
 
 
 def test_processed_data_validation_rejects_invalid_ride_lengths():
