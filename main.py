@@ -1,3 +1,4 @@
+import argparse
 from pathlib import Path
 
 from src.analyze_data import create_all_summary_tables, save_summary_tables
@@ -33,6 +34,19 @@ ANALYTICAL_COLUMNS = {
     "month",
     "hour",
 }
+
+
+def parse_arguments(arguments: list[str] | None = None) -> argparse.Namespace:
+    """Parse command-line options for running the pipeline."""
+    parser = argparse.ArgumentParser(
+        description="Run the Cyclistic data pipeline.",
+    )
+    parser.add_argument(
+        "--measure-performance",
+        action="store_true",
+        help="Report stage timings, total runtime, and sampled peak memory.",
+    )
+    return parser.parse_args(arguments)
 
 
 def format_month_window(required_datasets: list[DivvyDataset]) -> str:
@@ -224,4 +238,5 @@ def main(measure_performance: bool = False) -> PerformanceMetrics:
 
 
 if __name__ == "__main__":
-    main()
+    command_line_arguments = parse_arguments()
+    main(measure_performance=command_line_arguments.measure_performance)

@@ -59,6 +59,14 @@ def make_dataset(month: str) -> DivvyDataset:
     )
 
 
+def test_parse_arguments_controls_performance_measurement():
+    default_arguments = main.parse_arguments([])
+    measured_arguments = main.parse_arguments(["--measure-performance"])
+
+    assert default_arguments.measure_performance is False
+    assert measured_arguments.measure_performance is True
+
+
 def mock_current_raw_snapshot(monkeypatch, months: list[str]) -> None:
     datasets = [make_dataset(month) for month in months]
 
