@@ -75,6 +75,43 @@ The script creates:
 - summary tables in `outputs/tables/`
 - chart images in `outputs/charts/`
 
+## Performance Benchmarking
+
+Performance measurement is optional. In PowerShell, run the full pipeline with
+measurement enabled using:
+
+```powershell
+$env:MPLBACKEND = "Agg"
+python main.py --measure-performance
+```
+
+`MPLBACKEND=Agg` uses Matplotlib's non-interactive chart renderer, allowing chart
+generation without requiring a desktop GUI while still producing the normal PNG
+chart files. The pipeline prints a concise report containing:
+
+- elapsed time for each pipeline stage
+- total pipeline runtime
+- sampled peak process memory in MiB
+
+Performance measurement does not replace or change the cleaned dataset, summary
+tables, or charts.
+
+For a comparable before-and-after benchmark:
+
+1. Use the same computer and Python environment.
+2. Confirm both runs use the same rolling 12-month window shown in the pipeline
+   output.
+3. Record the Git commit being measured with `git rev-parse --short HEAD`.
+4. Close resource-heavy applications and keep the computer on the same power
+   setting.
+5. Run the command once as a warm-up, then collect at least three measured runs.
+6. Compare the median total runtime and review stage timings and sampled peak
+   memory for meaningful tradeoffs.
+
+Peak memory is sampled periodically, so it is an estimate rather than a guaranteed
+observation of every short-lived memory spike. Benchmark results should remain
+local unless deliberately selected as a documentation artifact.
+
 ## How to Run Tests
 
 ```bash
