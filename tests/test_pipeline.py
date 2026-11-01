@@ -116,9 +116,24 @@ def test_main_processes_valid_raw_data_and_creates_outputs(
 
     metrics = main.main(measure_performance=True)
 
+    activity_summary_path = (
+        tmp_path / "outputs" / "tables" / "ride_activity_summary.csv"
+    )
     assert (tmp_path / "data" / "processed" / "cyclistic_cleaned.csv").exists()
     assert (tmp_path / "outputs" / "tables" / "member_type_summary.csv").exists()
+    assert activity_summary_path.exists()
     assert (tmp_path / "outputs" / "charts" / "total_rides_by_rider_type.png").exists()
+    activity_summary = pd.read_csv(activity_summary_path)
+    assert activity_summary.columns.tolist() == [
+        "year_month",
+        "day_of_week",
+        "day_of_week_number",
+        "hour",
+        "member_casual",
+        "rideable_type",
+        "total_rides",
+        "total_ride_minutes",
+    ]
     assert set(metrics.stage_timings) == {
         "preparing project folders",
         "refreshing raw data snapshot",
@@ -205,6 +220,7 @@ def test_processed_data_validation_rejects_invalid_ride_lengths():
             "member_casual": ["member"],
             "ride_length": [-60],
             "day_of_week": ["Sunday"],
+            "year_month": ["2023-01"],
             "month": ["January"],
             "hour": [10],
         }

@@ -137,6 +137,7 @@ def top_start_stations(
 def create_all_summary_tables(dataframe: pd.DataFrame) -> dict[str, pd.DataFrame]:
     """Create all summary tables required for the case study."""
     return {
+        "ride_activity_summary": summarize_ride_activity(dataframe),
         "member_type_summary": summarize_by_member_type(dataframe),
         "rides_by_day": rides_by_day(dataframe),
         "rides_by_month": rides_by_month(dataframe),

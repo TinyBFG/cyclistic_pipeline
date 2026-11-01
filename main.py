@@ -31,6 +31,7 @@ ANALYTICAL_COLUMNS = {
     "member_casual",
     "ride_length",
     "day_of_week",
+    "year_month",
     "month",
     "hour",
 }
