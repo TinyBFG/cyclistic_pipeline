@@ -35,6 +35,31 @@ def test_day_of_week_creation():
     assert result.loc[0, "day_of_week"] == "Monday"
 
 
+def test_year_month_preserves_year_and_removes_invalid_timestamps():
+    data = pd.DataFrame(
+        {
+            "ride_id": ["december", "january", "invalid"],
+            "rideable_type": ["classic_bike"] * 3,
+            "started_at": [
+                "2025-12-31 23:30:00",
+                "2026-01-01 00:30:00",
+                "not-a-timestamp",
+            ],
+            "ended_at": [
+                "2025-12-31 23:45:00",
+                "2026-01-01 00:45:00",
+                "2026-01-01 01:00:00",
+            ],
+            "member_casual": ["member"] * 3,
+        }
+    )
+
+    result = clean_trip_data(data)
+
+    assert result["year_month"].tolist() == ["2025-12", "2026-01"]
+    assert result["month"].tolist() == ["December", "January"]
+
+
 def test_invalid_rides_are_removed():
     data = pd.DataFrame(
         {

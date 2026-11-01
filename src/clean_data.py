@@ -16,7 +16,7 @@ REQUIRED_NON_NULL_COLUMNS = [
 
 
 def add_analysis_fields(dataframe: pd.DataFrame) -> pd.DataFrame:
-    """Add ride_length, day_of_week, month, and hour fields."""
+    """Add ride duration and time-based analysis fields."""
     # Function serves two fold purposes for the started at and ended at fields
     # By formatting them you prepare them for calculation of new columns
     # and set up dropna for success with "coerce" taking non dt values and making them NaT
@@ -28,6 +28,7 @@ def add_analysis_fields(dataframe: pd.DataFrame) -> pd.DataFrame:
         trips["ended_at"] - trips["started_at"]
     ).dt.total_seconds() / 60
     trips["day_of_week"] = trips["started_at"].dt.day_name()
+    trips["year_month"] = trips["started_at"].dt.strftime("%Y-%m")
     trips["month"] = trips["started_at"].dt.month_name()
     trips["hour"] = trips["started_at"].dt.hour
 
@@ -70,6 +71,7 @@ def clean_trip_data(dataframe: pd.DataFrame) -> pd.DataFrame:
         "member_casual",
         "ride_length",
         "day_of_week",
+        "year_month",
         "month",
         "hour",
     ]
