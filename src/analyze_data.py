@@ -1,3 +1,4 @@
+from math import isclose
 from pathlib import Path
 
 import pandas as pd
@@ -47,6 +48,33 @@ def summarize_ride_activity(dataframe: pd.DataFrame) -> pd.DataFrame:
         .sort_values(sort_columns)
         .reset_index(drop=True)
     )
+
+
+def validate_ride_activity_summary(
+    dataframe: pd.DataFrame,
+    summary: pd.DataFrame,
+) -> None:
+    """Verify that BI activity metrics reconcile to the cleaned ride data."""
+    expected_rides = len(dataframe)
+    actual_rides = int(summary["total_rides"].sum())
+    if actual_rides != expected_rides:
+        raise ValueError(
+            "Ride activity summary count does not reconcile: "
+            f"expected {expected_rides}, got {actual_rides}."
+        )
+
+    expected_minutes = float(dataframe["ride_length"].sum())
+    actual_minutes = float(summary["total_ride_minutes"].sum())
+    if not isclose(
+        actual_minutes,
+        expected_minutes,
+        rel_tol=1e-12,
+        abs_tol=1e-6,
+    ):
+        raise ValueError(
+            "Ride activity summary duration does not reconcile: "
+            f"expected {expected_minutes}, got {actual_minutes}."
+        )
 
 
 def summarize_by_member_type(dataframe: pd.DataFrame) -> pd.DataFrame:
@@ -136,8 +164,11 @@ def top_start_stations(
 
 def create_all_summary_tables(dataframe: pd.DataFrame) -> dict[str, pd.DataFrame]:
     """Create all summary tables required for the case study."""
+    ride_activity_summary = summarize_ride_activity(dataframe)
+    validate_ride_activity_summary(dataframe, ride_activity_summary)
+
     return {
-        "ride_activity_summary": summarize_ride_activity(dataframe),
+        "ride_activity_summary": ride_activity_summary,
         "member_type_summary": summarize_by_member_type(dataframe),
         "rides_by_day": rides_by_day(dataframe),
         "rides_by_month": rides_by_month(dataframe),

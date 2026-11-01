@@ -1,8 +1,13 @@
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
-from src.analyze_data import summarize_by_member_type, summarize_ride_activity
+from src.analyze_data import (
+    summarize_by_member_type,
+    summarize_ride_activity,
+    validate_ride_activity_summary,
+)
 from src.clean_data import clean_trip_data
 from src.load_data import find_csv_files, load_trip_data, load_trip_files
 
@@ -116,3 +121,30 @@ def test_ride_activity_summary_uses_approved_grain_metrics_and_sort_order():
     result = summarize_ride_activity(data)
 
     pd.testing.assert_frame_equal(result, expected)
+    validate_ride_activity_summary(data, result)
+
+
+def test_ride_activity_reconciliation_rejects_incorrect_ride_count():
+    source = pd.DataFrame({"ride_length": [10.0]})
+    incorrect_summary = pd.DataFrame(
+        {
+            "total_rides": [2],
+            "total_ride_minutes": [10.0],
+        }
+    )
+
+    with pytest.raises(ValueError, match="count does not reconcile"):
+        validate_ride_activity_summary(source, incorrect_summary)
+
+
+def test_ride_activity_reconciliation_rejects_incorrect_duration():
+    source = pd.DataFrame({"ride_length": [10.0]})
+    incorrect_summary = pd.DataFrame(
+        {
+            "total_rides": [1],
+            "total_ride_minutes": [11.0],
+        }
+    )
+
+    with pytest.raises(ValueError, match="duration does not reconcile"):
+        validate_ride_activity_summary(source, incorrect_summary)
