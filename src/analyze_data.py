@@ -5,6 +5,50 @@ import pandas as pd
 from src.utils import DAY_ORDER, MONTH_ORDER
 
 
+def summarize_ride_activity(dataframe: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate cleaned rides at the approved BI activity grain."""
+    group_columns = [
+        "year_month",
+        "day_of_week",
+        "hour",
+        "member_casual",
+        "rideable_type",
+    ]
+    summary = (
+        dataframe.groupby(group_columns, dropna=False, sort=False)
+        .agg(
+            total_rides=("ride_id", "size"),
+            total_ride_minutes=("ride_length", "sum"),
+        )
+        .reset_index()
+    )
+    day_numbers = {day: number for number, day in enumerate(DAY_ORDER, start=1)}
+    summary["day_of_week_number"] = summary["day_of_week"].map(day_numbers)
+
+    output_columns = [
+        "year_month",
+        "day_of_week",
+        "day_of_week_number",
+        "hour",
+        "member_casual",
+        "rideable_type",
+        "total_rides",
+        "total_ride_minutes",
+    ]
+    sort_columns = [
+        "year_month",
+        "day_of_week_number",
+        "hour",
+        "member_casual",
+        "rideable_type",
+    ]
+    return (
+        summary.loc[:, output_columns]
+        .sort_values(sort_columns)
+        .reset_index(drop=True)
+    )
+
+
 def summarize_by_member_type(dataframe: pd.DataFrame) -> pd.DataFrame:
     """Calculate ride totals and ride length statistics by rider type."""
     summary = (
